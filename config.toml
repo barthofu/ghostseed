@@ -1,0 +1,3 @@
+[logs]
+level = "info" # Options: "error", "warn", "info", "debug", "trace"
+enable_reqwest_logging = false

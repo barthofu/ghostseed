@@ -1,0 +1,21 @@
+# env
+.direnv
+
+# build
+target/
+
+# secrets
+.env
+
+# ide
+.idea/
+
+# data
+data/
+!data/.gitkeep
+library/
+
+# misc
+tmp/
+/core
+rustypipe_cache.json
