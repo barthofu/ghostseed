@@ -18,8 +18,10 @@ pub fn export_seed_structure(seed_root: &Path, scene_name: &str, src_video: &Pat
 
     #[cfg(target_family = "unix")]
     {
-        debug!("Symlinking video: '{}' -> '{}'", src_video.display(), dest_video.display());
-        if let Err(e) = unix_fs::symlink(src_video, &dest_video) {
+        // Prefer relative symlink target where possible
+        let target = relative_target(&seed_dir, src_video).unwrap_or_else(|| src_video.to_path_buf());
+        debug!("Symlinking video: '{}' -> '{}'", target.display(), dest_video.display());
+        if let Err(e) = unix_fs::symlink(&target, &dest_video) {
             error!("Failed to symlink video '{}': {}", dest_video.display(), e);
         }
     }
@@ -39,7 +41,8 @@ pub fn export_seed_structure(seed_root: &Path, scene_name: &str, src_video: &Pat
     if src_nfo.exists() {
         #[cfg(target_family = "unix")]
         {
-            if let Err(e) = unix_fs::symlink(&src_nfo, &dest_nfo) {
+            let nfo_target = relative_target(&seed_dir, &src_nfo).unwrap_or_else(|| src_nfo.to_path_buf());
+            if let Err(e) = unix_fs::symlink(&nfo_target, &dest_nfo) {
                 warn!("Failed to symlink mediainfo.nfo ({}), generating new text NFO", e);
                 let _ = crate::core::media::mediainfo::write_text_nfo(src_video.to_string_lossy().as_ref(), &dest_nfo);
             }
@@ -56,4 +59,23 @@ pub fn export_seed_structure(seed_root: &Path, scene_name: &str, src_video: &Pat
     }
 
     Ok(())
+}
+
+/// Compute a relative path from `from_dir` to `to_path` if they share a common ancestor.
+#[cfg(target_family = "unix")]
+fn relative_target(from_dir: &Path, to_path: &Path) -> Option<std::path::PathBuf> {
+    if !from_dir.is_absolute() || !to_path.is_absolute() { return None; }
+    // Find the deepest ancestor of `from_dir` that prefixes `to_path`
+    let mut ancestor_opt = None;
+    for anc in from_dir.ancestors() {
+        if to_path.starts_with(anc) { ancestor_opt = Some(anc); break; }
+    }
+    let ancestor = ancestor_opt?;
+    let from_suffix = from_dir.strip_prefix(ancestor).ok()?;
+    let to_suffix = to_path.strip_prefix(ancestor).ok()?;
+    let mut rel = std::path::PathBuf::new();
+    let up_count = from_suffix.components().count();
+    for _ in 0..up_count { rel.push(".."); }
+    rel.push(to_suffix);
+    Some(rel)
 }
